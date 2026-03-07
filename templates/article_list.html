@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+{%- set date_format = macros_translate::translate(key="date_format", default="%B %d, %Y", language_strings=language_strings) -%}
+{%- set date_locale = macros_translate::translate(key="date_locale", default="en_US", language_strings=language_strings) -%}
+
+{%- if paginator.pages -%}
+	{%- set number_of_posts = paginator.total_pages -%}
+	{%- set list_label = macros_translate::translate(key="posts", number=number_of_posts, default="$NUMBER posts in total", language_strings=language_strings) -%}
+{%- elif section.pages -%}
+	{%- set direct_pages = section.pages | length -%}
+	{%- set subsection_count = section.subsections | length -%}
+	{%- set number_of_posts = direct_pages + subsection_count -%}
+	{%- if subsection_count > 0 -%}
+		{%- set list_label = macros_translate::translate(key="posts", number=number_of_posts, default="$NUMBER entries in total", language_strings=language_strings) -%}
+	{%- else -%}
+		{%- set list_label = macros_translate::translate(key="posts", number=number_of_posts, default="$NUMBER posts in total", language_strings=language_strings) -%}
+	{%- endif -%}
+{%- endif -%}
+
+<h1>{{ section.title }}</h1>
+
+{{ section.content | safe }}
+
+<p>
+	<small>
+		{%- if config.taxonomies | length > 0 -%}
+			<a href="{{ get_url(path='tags', lang=lang) }}">
+				{{ macros_translate::translate(key="filter_by_tag", default="Filter by tag", language_strings=language_strings) }}
+			</a>
+			<br />
+		{%- endif %}
+		{{ list_label }}
+	</small>
+</p>
+
+{% if section.subsections and section.subsections | length > 0 %}
+<div id="article-list">
+	{%- for subsection_path in section.subsections %}
+		{%- set subsection = get_section(path=subsection_path) -%}
+		<article>
+			<a href="{{ subsection.permalink | safe }}"></a>
+			<h3>{{ subsection.title }}</h3>
+			{%- if subsection.description %}
+				{{ subsection.description | markdown | safe }}
+			{%- endif %}
+			<div class="details">
+				<small>{{ subsection.pages | length }} posts in series</small>
+			</div>
+		</article>
+	{%- endfor %}
+</div>
+{% endif %}
+
+{% include "partials/articles.html" %}
+{% include "partials/paginator.html" %}
+
+{% endblock content %}

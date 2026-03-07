@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title>MALEK452 - Phishing</title>
+    <link rel="self" type="application/atom+xml" href="https://malek4522.github.io/MalekZone/tags/phishing/atom.xml"/>
+    <link rel="alternate" type="text/html" href="https://malek4522.github.io/MalekZone/"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2026-03-07T00:00:00+00:00</updated>
+    <id>https://malek4522.github.io/MalekZone/tags/phishing/atom.xml</id>
+    <entry xml:lang="en">
+        <title>SMS Spam Detection with Naive Bayes</title>
+        <published>2026-03-07T00:00:00+00:00</published>
+        <updated>2026-03-07T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            MALEK452
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/sms-spam-detection/"/>
+        <id>https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/sms-spam-detection/</id>
+        
+        <content type="html" xml:base="https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/sms-spam-detection/">&lt;p&gt;&lt;i&gt;This post is based on my solution notebook for the Hack The Box AI Red Teamer path module on applying AI in infosec. I rewrote the accompanying article to focus on the methodological logic of spam detection rather than on the mechanics of the notebook itself.&lt;&#x2F;i&gt;&lt;&#x2F;p&gt;
+&lt;div class=&quot;buttons centered&quot;&gt;
+  &lt;a href=&quot;&#x2F;notebooks&#x2F;htb-ai-red-teamer&#x2F;sms.ipynb&quot; download&gt;Download notebook&lt;&#x2F;a&gt;
+&lt;&#x2F;div&gt;
+&lt;h2&gt;Problem Setting&lt;&#x2F;h2&gt;
+&lt;p&gt;
+SMS spam detection is a compact but useful proxy for &lt;b&gt;smishing defense&lt;&#x2F;b&gt;. Unlike long-form email, SMS content is short, sparse, urgency-heavy, and lexically repetitive. Attackers rely on constrained text budgets, which often makes their language statistically easier to model than more elaborate phishing campaigns.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+That characteristic makes SMS an excellent setting for classical text classification. If a method cannot perform well on short, high-signal lure text, it is unlikely to hold up in more complex messaging environments.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Why a Classical Model Is Appropriate Here&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The notebook uses &lt;b&gt;Multinomial Naive Bayes&lt;&#x2F;b&gt; with unigram and bigram features. This is not a compromise born of simplicity alone; it is also a methodologically sensible decision.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Naive Bayes performs well when predictive signal is concentrated in sparse lexical cues. Spam and smishing messages often exhibit exactly that structure: &quot;free&quot;, &quot;win&quot;, &quot;urgent&quot;, &quot;claim&quot;, &quot;verify&quot;, monetary references, and reward-oriented phrasing. Because many of these indicators are explicit rather than deeply contextual, a lightweight probabilistic model can remain highly competitive as a baseline.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+In other words, the model is chosen because the statistical structure of the problem justifies it, not merely because it is easy to implement.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Dataset and Data Quality&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The experiment uses the &lt;b&gt;UCI SMS Spam Collection&lt;&#x2F;b&gt;. The raw dataset contains &lt;b&gt;5,572&lt;&#x2F;b&gt; messages, no missing values, and &lt;b&gt;403&lt;&#x2F;b&gt; duplicate entries, which are removed before modeling. That leaves an effective working corpus of &lt;b&gt;5,169&lt;&#x2F;b&gt; rows.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Deduplication matters more than it might seem. In spam datasets, repeated templates can artificially inflate model confidence and make evaluation look stronger than it really is. Removing duplicates therefore improves the integrity of the experiment by reducing the chance that a classifier simply memorizes recurring lure variants.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The label distribution is also imbalanced toward benign &lt;code&gt;ham&lt;&#x2F;code&gt; messages, which mirrors real-world defensive settings. A good spam detector should therefore be judged on class-sensitive metrics rather than raw accuracy alone.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Preprocessing Strategy&lt;&#x2F;h2&gt;
+&lt;p&gt;
+Messages are lowercased, stripped of most punctuation and digits, tokenized, filtered for English stop words, stemmed with Porter stemming, and then rejoined into normalized strings.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+This preprocessing pipeline reflects a clear modeling philosophy: reduce superficial lexical variation so that semantically similar lure phrases collapse toward the same feature representation. For example, stemming helps normalize families of words that differ morphologically but carry similar spam intent.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The notebook preserves &lt;code&gt;$&lt;&#x2F;code&gt; and &lt;code&gt;!&lt;&#x2F;code&gt;, which is a good choice for a spam problem. Financial cues and emphatic punctuation are not noise here; they are part of the signal.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+There is, however, a tradeoff. Removing numbers may weaken sensitivity to phone numbers, short codes, or numeric prize language. For a stricter smishing study, I would test whether number-preserving normalization improves performance on lure-heavy messages containing transaction amounts, OTP prompts, or callback instructions.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Feature Design&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The vectorizer uses:
+&lt;&#x2F;p&gt;
+&lt;pre&gt;ngram_range = (1, 2)
+min_df = 1
+max_df = 0.9&lt;&#x2F;pre&gt;
+&lt;p&gt;
+This configuration is well chosen for short text. Unigrams capture the dominant lexical cues, while bigrams recover short phrase structure such as &quot;claim now&quot;, &quot;free entry&quot;, or &quot;call later&quot;. The &lt;code&gt;max_df&lt;&#x2F;code&gt; threshold suppresses extremely common terms that are unlikely to be discriminative across classes.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+For this problem, bag-of-words features are not a weakness; they are aligned with the threat model. Smishing campaigns frequently optimize for direct lexical pressure rather than subtle semantics.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Model Selection&lt;&#x2F;h2&gt;
+&lt;p&gt;
+Rather than fixing the Naive Bayes smoothing term by intuition, the notebook performs a grid search over:
+&lt;&#x2F;p&gt;
+&lt;pre&gt;alpha = [0.01, 0.1, 0.15, 0.2, 0.25, 0.5, 0.75, 1.0]&lt;&#x2F;pre&gt;
+&lt;p&gt;
+with &lt;b&gt;5-fold cross-validation&lt;&#x2F;b&gt; and &lt;b&gt;F1-score&lt;&#x2F;b&gt; as the optimization metric. The best parameter is:
+&lt;&#x2F;p&gt;
+&lt;pre&gt;{&#x27;classifier__alpha&#x27;: 0.25}&lt;&#x2F;pre&gt;
+&lt;p&gt;
+This is a sound choice. F1-score is more appropriate than plain accuracy in imbalanced security classification because it captures the tension between missing malicious messages and over-flagging benign ones. Selecting hyperparameters by F1 therefore better reflects operational cost than maximizing raw correctness.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Inference Behavior&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The notebook evaluates several synthetic example messages, including reward lures, account-compromise bait, and benign social coordination text. The predictions are directionally correct: promotional prize messages and urgent verification prompts score as spam, while everyday reminders and lunch coordination messages score as non-spam.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+That is exactly what a well-behaved lexical baseline should do. It responds strongly to high-signal lure language without needing deep contextual reasoning.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Why This Baseline Is Useful&lt;&#x2F;h2&gt;
+&lt;p&gt;
+Classical text models remain operationally attractive for anti-phishing pipelines because they are fast, interpretable, and cheap to deploy. A Naive Bayes model with transparent vocabulary features can be inspected by defenders, retrained quickly, and integrated as one signal among others such as sender reputation, URL features, device telemetry, or mobile-app context.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+For many real systems, that is exactly the right role: not a universal phishing oracle, but a &lt;b&gt;high-speed lexical filter&lt;&#x2F;b&gt; that feeds a larger decision pipeline.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Limitations&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The notebook does not present a formal held-out test-set evaluation after model selection; it relies on cross-validation and example inference. That is acceptable for an educational baseline but not sufficient for a paper-style performance claim. A stronger study would include a strict train-test split, confusion matrix analysis, class-wise precision and recall, calibration behavior, and robustness against deliberate obfuscation.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The model is also vulnerable to adversarial wording changes. Character substitutions, multilingual bait, URL obfuscation, benign-text padding, and stylistic drift can all reduce the effectiveness of simple lexical features. Those are not reasons to reject the method; they are reasons to place it appropriately in a layered defense.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Conclusion&lt;&#x2F;h2&gt;
+&lt;p&gt;
+This experiment is a strong example of methodological fit. Naive Bayes is chosen because SMS spam is sparse and lexically explicit. Bigrams are included because short phrase structure matters. F1-based model selection is used because class-sensitive error matters more than raw accuracy. As a result, the notebook produces a credible smishing-oriented baseline that is lightweight, explainable, and operationally realistic as an early filtering component.
+&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+</feed>

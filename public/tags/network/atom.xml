@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title>MALEK452 - Network</title>
+    <link rel="self" type="application/atom+xml" href="https://malek4522.github.io/MalekZone/tags/network/atom.xml"/>
+    <link rel="alternate" type="text/html" href="https://malek4522.github.io/MalekZone/"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2026-03-07T00:00:00+00:00</updated>
+    <id>https://malek4522.github.io/MalekZone/tags/network/atom.xml</id>
+    <entry xml:lang="en">
+        <title>Network Anomaly Detection with Random Forests</title>
+        <published>2026-03-07T00:00:00+00:00</published>
+        <updated>2026-03-07T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            MALEK452
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/network-anomaly-detection/"/>
+        <id>https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/network-anomaly-detection/</id>
+        
+        <content type="html" xml:base="https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/network-anomaly-detection/">&lt;p&gt;&lt;i&gt;This post is based on my solution notebook for the Hack The Box AI Red Teamer path module on applying AI in infosec. The notebook itself is compact; the discussion below reframes it as a methodological study of attack categorization in tabular network data.&lt;&#x2F;i&gt;&lt;&#x2F;p&gt;
+&lt;div class=&quot;buttons centered&quot;&gt;
+  &lt;a href=&quot;&#x2F;notebooks&#x2F;htb-ai-red-teamer&#x2F;network.ipynb&quot; download&gt;Download notebook&lt;&#x2F;a&gt;
+&lt;&#x2F;div&gt;
+&lt;h2&gt;Problem Setting&lt;&#x2F;h2&gt;
+&lt;p&gt;
+Network intrusion detection can be framed at multiple levels of granularity. The simplest formulation is binary: normal versus malicious. That framing is operationally useful for alerting, but it is incomplete for response. A volumetric denial-of-service event, a reconnaissance scan, a privilege-escalation attempt, and an unauthorized access pattern impose different investigative and containment priorities.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The notebook therefore adopts a &lt;b&gt;multi-class&lt;&#x2F;b&gt; formulation. Instead of predicting individual NSL-KDD attack names directly, it groups them into broader response-oriented categories:
+&lt;&#x2F;p&gt;
+&lt;ul&gt;
+  &lt;li&gt;&lt;b&gt;Normal&lt;&#x2F;b&gt;&lt;&#x2F;li&gt;
+  &lt;li&gt;&lt;b&gt;DoS&lt;&#x2F;b&gt;&lt;&#x2F;li&gt;
+  &lt;li&gt;&lt;b&gt;Probe&lt;&#x2F;b&gt;&lt;&#x2F;li&gt;
+  &lt;li&gt;&lt;b&gt;Privilege&lt;&#x2F;b&gt;&lt;&#x2F;li&gt;
+  &lt;li&gt;&lt;b&gt;Access&lt;&#x2F;b&gt;&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;
+This design is sensible. It reduces label fragmentation while preserving distinctions that matter to defenders. In research terms, it is a compromise between coarse anomaly detection and fine-grained attack taxonomy.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Why a Tabular Model?&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The NSL-KDD dataset is fundamentally a structured-feature dataset. Each record already contains engineered attributes such as byte counts, error rates, host-level statistics, and service-level frequencies. Under those conditions, tree-based ensemble methods are often a stronger baseline than deep models because the representation work has already been done.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+That is why the notebook uses a &lt;b&gt;RandomForestClassifier&lt;&#x2F;b&gt;. Random forests are particularly well suited to this setting for four reasons:
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+They naturally handle nonlinear interactions without requiring feature scaling. They are robust to mixed feature distributions. They perform well when informative thresholds exist in the data. And they provide strong baseline accuracy on structured intrusion-detection corpora with limited hyperparameter tuning.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+This is an example of choosing a model that matches the data modality rather than defaulting to neural architectures for their own sake.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Feature Representation&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The dataset contains &lt;b&gt;148,517&lt;&#x2F;b&gt; rows. Categorical fields are partially encoded using one-hot vectors for &lt;code&gt;protocol_type&lt;&#x2F;code&gt; and &lt;code&gt;service&lt;&#x2F;code&gt;, then joined with &lt;b&gt;34&lt;&#x2F;b&gt; numeric traffic features. These numeric variables capture flow size, login behavior, fragment anomalies, connection density, and host&#x2F;service error rates.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The choice of features reflects a classic IDS assumption: malicious traffic differs from benign traffic not only by payload content but also by its statistical footprint. Repeated failed connections, abnormal byte asymmetry, unexpected service concentration, or unusually high host error rates can all function as predictive signals.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+There is also an instructive omission. The notebook does not encode the &lt;code&gt;flag&lt;&#x2F;code&gt; feature, even though it exists in the dataset and often carries meaningful connection-state information. The fact that the model still performs well suggests the remaining feature set is highly informative, but it also means the experiment is best read as a strong baseline rather than a maximally engineered version of NSL-KDD.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Label Engineering&lt;&#x2F;h2&gt;
+&lt;p&gt;
+A major methodological step is the mapping from individual attacks to grouped attack families. This is not just cosmetic label cleanup. It imposes a defender-oriented inductive structure on the dataset.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+For example, grouping &lt;code&gt;nmap&lt;&#x2F;code&gt;, &lt;code&gt;portsweep&lt;&#x2F;code&gt;, and &lt;code&gt;satan&lt;&#x2F;code&gt; into &lt;b&gt;Probe&lt;&#x2F;b&gt; reflects the fact that these behaviors are distinct at the tactical level but similar in terms of reconnaissance intent. Likewise, consolidating exploit-like behaviors into &lt;b&gt;Privilege&lt;&#x2F;b&gt; and credential or service abuse into &lt;b&gt;Access&lt;&#x2F;b&gt; makes the output more interpretable from a triage perspective.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+This kind of label engineering often matters as much as model selection because it determines what the model is actually being asked to learn.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Experimental Design&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The data is split into train and test partitions with &lt;b&gt;80&#x2F;20&lt;&#x2F;b&gt; separation, followed by an additional validation split carved from the training set. The model uses &lt;code&gt;class_weight=&quot;balanced&quot;&lt;&#x2F;code&gt;, which is important because attack categories are unevenly represented.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+That weighting is not sufficient to eliminate imbalance effects, but it is a reasonable first response. It tells the forest not to optimize purely for the dominant classes, which in this dataset would otherwise lead to inflated global accuracy and weak minority-class recall.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Why the Results Look Better Than They Are&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The validation metrics are extremely high:
+&lt;&#x2F;p&gt;
+&lt;pre&gt;Accuracy:  0.9947
+Precision: 0.9946
+Recall:    0.9947
+F1-score:  0.9945&lt;&#x2F;pre&gt;
+&lt;p&gt;
+The test metrics remain similarly strong:
+&lt;&#x2F;p&gt;
+&lt;pre&gt;Accuracy:  0.9950
+Precision: 0.9949
+Recall:    0.9950
+F1-score:  0.9949&lt;&#x2F;pre&gt;
+&lt;p&gt;
+A superficial reading would conclude that the detection problem is essentially solved. That conclusion would be incorrect.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The detailed class report reveals the real story. &lt;b&gt;Normal&lt;&#x2F;b&gt;, &lt;b&gt;DoS&lt;&#x2F;b&gt;, and &lt;b&gt;Probe&lt;&#x2F;b&gt; are classified almost perfectly. But the &lt;b&gt;Privilege&lt;&#x2F;b&gt; class performs far worse, with recall of &lt;b&gt;0.33&lt;&#x2F;b&gt; on validation and &lt;b&gt;0.52&lt;&#x2F;b&gt; on test. The problem is not the random forest itself; the problem is the combination of low support and difficult minority-class structure.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+This is a recurring pattern in security machine learning. The classes that dominate the weighted averages are often not the classes that matter most in practice. Missing a rare privilege-escalation event is usually more consequential than slightly over-alerting on common reconnaissance.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Interpretation&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The strong performance on DoS and Probe is intuitive. These classes are well represented and tend to have consistent statistical signatures. Flooding, scan behavior, and service enumeration often leave highly separable traces in engineered connection features.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Privilege and Access events are harder. They may be sparse, heterogeneous, and closer to normal application behavior in feature space. They are also the classes where semantic context would help most, but the model sees only precomputed network statistics.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+This distinction matters because it tells us what the model is actually good at: &lt;b&gt;macro-pattern intrusion triage&lt;&#x2F;b&gt;, not reliable detection of subtle high-value compromise behaviors.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Why Random Forest Is Still a Good Choice&lt;&#x2F;h2&gt;
+&lt;p&gt;
+Even with these limitations, the model choice remains defensible. A random forest gives excellent baseline performance with little tuning, trains quickly, and provides a robust reference point for future improvements. In research workflow terms, it is the right baseline to beat before moving to more complex methods such as gradient boosting, cost-sensitive ensembles, or neural tabular architectures.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Importantly, the notebook saves the trained model to &lt;code&gt;network_anomaly_detection_model.joblib&lt;&#x2F;code&gt;, which makes the exercise more than purely academic. The output is deployable as a scoring component, provided its limitations are respected.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Limitations&lt;&#x2F;h2&gt;
+&lt;p&gt;
+NSL-KDD is an educational dataset, not a faithful representation of modern enterprise traffic. That matters because a model can perform extremely well on this benchmark while generalizing poorly to contemporary encrypted, cloud-mediated, or heavily multiplexed environments.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The evaluation also remains feature-centric. There is no adversarial robustness analysis, no concept-drift study, and no calibration assessment. A detector that is accurate but poorly calibrated can still create operational problems if its confidence scores are used for automation.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Finally, the minority-class issue should be treated as central, not peripheral. For real deployment, I would prioritize class-specific recall improvements over pushing the already excellent global accuracy a few decimal points higher.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Conclusion&lt;&#x2F;h2&gt;
+&lt;p&gt;
+This experiment shows why structured-feature intrusion detection remains a strong domain for classical ensemble learning. The choice of a random forest is justified by the nature of the data, the grouped label design is justified by operational response logic, and the results are strong enough to establish a serious baseline. The important lesson, however, is not that the model achieves 99.5% accuracy. It is that high aggregate metrics can conceal the exact failure modes defenders care about most.
+&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+</feed>

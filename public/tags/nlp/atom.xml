@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title>MALEK452 - NLP</title>
+    <link rel="self" type="application/atom+xml" href="https://malek4522.github.io/MalekZone/tags/nlp/atom.xml"/>
+    <link rel="alternate" type="text/html" href="https://malek4522.github.io/MalekZone/"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2026-03-07T00:00:00+00:00</updated>
+    <id>https://malek4522.github.io/MalekZone/tags/nlp/atom.xml</id>
+    <entry xml:lang="en">
+        <title>Sentiment Analysis with an LSTM Pipeline</title>
+        <published>2026-03-07T00:00:00+00:00</published>
+        <updated>2026-03-07T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            MALEK452
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/sentiment-analysis-lstm/"/>
+        <id>https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/sentiment-analysis-lstm/</id>
+        
+        <content type="html" xml:base="https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/sentiment-analysis-lstm/">&lt;p&gt;&lt;i&gt;This post is based on my solution notebook for the Hack The Box AI Red Teamer path module on applying AI in infosec. The underlying dataset is not security-specific, but the pipeline is relevant because it demonstrates a principled sequence-modeling workflow that can be transferred to security text tasks.&lt;&#x2F;i&gt;&lt;&#x2F;p&gt;
+&lt;div class=&quot;buttons centered&quot;&gt;
+  &lt;a href=&quot;&#x2F;notebooks&#x2F;htb-ai-red-teamer&#x2F;sentiment.ipynb&quot; download&gt;Download notebook&lt;&#x2F;a&gt;
+&lt;&#x2F;div&gt;
+&lt;h2&gt;Why This Task Still Matters in an Infosec Context&lt;&#x2F;h2&gt;
+&lt;p&gt;
+At first glance, sentiment classification on movie reviews appears orthogonal to security. It is not. What matters here is not the target label but the &lt;b&gt;NLP design pattern&lt;&#x2F;b&gt;: raw-text normalization, vocabulary management, sequence construction, recurrent modeling, and held-out evaluation. These are the same building blocks one would use for phishing-lure classification, ticket triage, analyst note tagging, or threat-intelligence text processing.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The notebook is therefore best interpreted as a &lt;b&gt;transferable methodological template&lt;&#x2F;b&gt; rather than as a domain-specific security detector.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Representation Choice&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The first important decision is to treat text as an ordered sequence rather than a bag of independent terms. That is why the notebook uses an &lt;b&gt;LSTM&lt;&#x2F;b&gt; instead of a purely count-based classifier.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+This choice has a defensible motivation. Sentiment often depends on compositional structure, negation, and local temporal dependency. The phrase &quot;not good&quot; should not be interpreted the same way as &quot;good&quot;, and simple lexical frequency models can struggle with that distinction. More broadly, many security-adjacent text problems also contain order-dependent meaning, especially in user reports, lure language, and free-form narratives.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+An LSTM is therefore a reasonable baseline whenever the goal is to capture short- and medium-range contextual dependencies without jumping immediately to transformer architectures.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Preprocessing Philosophy&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The notebook cleans the corpus by stripping HTML, lowercasing, collapsing whitespace, removing most non-alphanumeric symbols, tokenizing with NLTK, and removing English stop words. Importantly, it preserves a small set of punctuation symbols such as &lt;code&gt;!&lt;&#x2F;code&gt;, &lt;code&gt;$&lt;&#x2F;code&gt;, and &lt;code&gt;?&lt;&#x2F;code&gt;.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+That is a subtle but meaningful design choice. In informal online text, punctuation often carries emotional or persuasive force. In security-related corpora, those same symbols can correlate with urgency, coercion, or fraud. A preprocessing pipeline that deletes all such markers may inadvertently remove useful discriminative signal.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The tradeoff is that stop-word removal can weaken sequence semantics in some contexts. For bag-of-words models it is common and often beneficial. For sequence models, the case is less obvious because function words sometimes help preserve relational meaning. This notebook keeps the pipeline simple, but that choice would deserve ablation testing in a more formal study.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Sequence Construction&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The text is tokenized with a Keras tokenizer capped at a vocabulary of &lt;b&gt;20,000&lt;&#x2F;b&gt; words and an explicit &lt;code&gt;&amp;lt;OOV&amp;gt;&lt;&#x2F;code&gt; token. Sequences are padded to a fixed length of &lt;b&gt;200&lt;&#x2F;b&gt;.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Both decisions are sensible compromises. Vocabulary truncation prevents the model from overfitting to extremely rare terms and keeps the embedding layer tractable. Fixed-length padding provides computational regularity and allows batching, while the out-of-vocabulary token gives the model a principled fallback for unseen text at inference time.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+In research terms, this is a controlled capacity-management strategy: bound the lexical space, bound the sequence length, and let the model learn under those constraints.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Architecture Choice&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The model architecture is:
+&lt;&#x2F;p&gt;
+&lt;pre&gt;Embedding(20000, 128)
+LSTM(64)
+Dropout(0.5)
+Dense(1, activation=&quot;sigmoid&quot;)&lt;&#x2F;pre&gt;
+&lt;p&gt;
+Each layer has a clear role. The embedding layer converts sparse token identities into dense vector representations. The LSTM models sequential dependency. The dropout layer regularizes the representation before classification. The sigmoid output is appropriate for binary prediction.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+This is not a state-of-the-art architecture, and that is precisely why it is useful. It is compact enough that the modeling assumptions remain legible. If a much more complex system is later introduced, this baseline provides a clean reference point for judging whether the added complexity is actually buying meaningful performance.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Optimization and Learning Dynamics&lt;&#x2F;h2&gt;
+&lt;p&gt;
+Training uses the Adam optimizer, binary cross-entropy loss, a batch size of &lt;b&gt;32&lt;&#x2F;b&gt;, and &lt;b&gt;5 epochs&lt;&#x2F;b&gt;. The model is evaluated on a validation set split from the original training data and then on a separate test set.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The learning curve is instructive. The first three epochs remain weak, then performance improves sharply:
+&lt;&#x2F;p&gt;
+&lt;pre&gt;Epoch 1: accuracy 0.5122, val_accuracy 0.5320
+Epoch 2: accuracy 0.5476, val_accuracy 0.5278
+Epoch 3: accuracy 0.5653, val_accuracy 0.5408
+Epoch 4: accuracy 0.8023, val_accuracy 0.8542
+Epoch 5: accuracy 0.9196, val_accuracy 0.8750&lt;&#x2F;pre&gt;
+&lt;p&gt;
+This pattern is consistent with sequence models that need several epochs before the embedding space and recurrent state dynamics begin to align with the task signal. The later jump suggests the network eventually learns more meaningful token interactions rather than merely surface-level frequency patterns.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Evaluation&lt;&#x2F;h2&gt;
+&lt;p&gt;
+On the held-out test set, the model reports:
+&lt;&#x2F;p&gt;
+&lt;pre&gt;Loss:     0.3676
+Accuracy: 0.8603&lt;&#x2F;pre&gt;
+&lt;p&gt;
+An &lt;b&gt;86.03%&lt;&#x2F;b&gt; test accuracy is respectable for a compact baseline, but the more important conclusion is interpretive rather than numerical. The architecture is strong enough to capture sequential text structure, yet still simple enough that there is substantial room for improvement through better preprocessing decisions, pretrained embeddings, bidirectional recurrence, or modern transformer baselines.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;What This Teaches for Security NLP&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The real value of this exercise lies in its transferability. Security text is often noisy, inconsistent, and partially structured. Whether the task is classifying phishing emails, labeling incident tickets, detecting coercive language in social engineering, or filtering open-source chatter, the same questions recur:
+&lt;&#x2F;p&gt;
+&lt;ul&gt;
+  &lt;li&gt;What information should preprocessing preserve?&lt;&#x2F;li&gt;
+  &lt;li&gt;How large should the vocabulary be?&lt;&#x2F;li&gt;
+  &lt;li&gt;How much sequence context is enough?&lt;&#x2F;li&gt;
+  &lt;li&gt;Is order-dependent modeling worth the complexity over lexical baselines?&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;
+This notebook provides a reasonable answer set for a baseline sequence model.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Limitations&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The dataset is not security-native, so task transfer is conceptual rather than empirical. Any serious security application would require domain data, label design aligned with analyst workflows, and evaluation on realistic class distributions.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+There is also an artifact-management caveat. The notebook saves both a Keras model file and a &lt;code&gt;joblib&lt;&#x2F;code&gt; dump. In practice, the native Keras serialization path is the more appropriate long-term artifact, and the tokenizer should be versioned alongside the model.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Finally, by 2026, transformer models are the default comparison point for many text tasks. That does not invalidate the LSTM baseline, but it does mean the architecture should be understood as a deliberate simplicity choice rather than a modern upper bound.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Conclusion&lt;&#x2F;h2&gt;
+&lt;p&gt;
+This experiment is valuable because it makes its assumptions visible. The LSTM is chosen to model sequence dependence, the vocabulary cap is chosen to control capacity, padding is chosen to stabilize batching, and the final accuracy shows that a compact recurrent model can still learn meaningful textual structure. As a research-style baseline for security-adjacent NLP, that is exactly the kind of result worth documenting.
+&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+</feed>

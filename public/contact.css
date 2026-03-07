@@ -1,0 +1,4 @@
+/* Hide reading time indicator only on the Contact page */
+#heading small span {
+  display: none;
+}

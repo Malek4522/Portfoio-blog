@@ -1,0 +1,495 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+    <title>MALEK452 - AI</title>
+    <link rel="self" type="application/atom+xml" href="https://malek4522.github.io/MalekZone/tags/ai/atom.xml"/>
+    <link rel="alternate" type="text/html" href="https://malek4522.github.io/MalekZone/"/>
+    <generator uri="https://www.getzola.org/">Zola</generator>
+    <updated>2026-03-07T00:00:00+00:00</updated>
+    <id>https://malek4522.github.io/MalekZone/tags/ai/atom.xml</id>
+    <entry xml:lang="en">
+        <title>Visual Malware Classification with ResNet50</title>
+        <published>2026-03-07T00:00:00+00:00</published>
+        <updated>2026-03-07T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            MALEK452
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/malware-image-classification/"/>
+        <id>https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/malware-image-classification/</id>
+        
+        <content type="html" xml:base="https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/malware-image-classification/">&lt;p&gt;&lt;i&gt;This post is based on my solution notebook for the Hack The Box AI Red Teamer path module on applying AI in infosec. I rewrote the analysis here in a more research-oriented format so the discussion focuses on methodological choices and their implications rather than simply restating the notebook.&lt;&#x2F;i&gt;&lt;&#x2F;p&gt;
+&lt;div class=&quot;buttons centered&quot;&gt;
+  &lt;a href=&quot;&#x2F;notebooks&#x2F;htb-ai-red-teamer&#x2F;malware.ipynb&quot; download&gt;Download notebook&lt;&#x2F;a&gt;
+&lt;&#x2F;div&gt;
+&lt;h2&gt;Problem Setting&lt;&#x2F;h2&gt;
+&lt;p&gt;
+Malware family classification is a triage problem. The objective is not to fully explain a sample&#x27;s behavior or replace reverse engineering; it is to assign a plausible family label quickly enough to accelerate downstream analysis. In operational settings, that matters because analysts do not usually need a perfect semantic description for every binary. They need an informed prior: is this sample likely part of a known family, a repackaged variant, or something structurally distinct enough to justify deeper attention?
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The notebook approaches that problem through &lt;b&gt;visual malware representation&lt;&#x2F;b&gt;. Raw binaries are rendered as images and then classified using a convolutional architecture. This choice reflects a specific hypothesis: malware families often preserve stable structural regularities in their byte layout, and those regularities can become visually separable even when the underlying semantic code is not explicitly parsed.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Why an Image-Based Representation?&lt;&#x2F;h2&gt;
+&lt;p&gt;
+There are at least three reasons image-based malware classification remains attractive as a baseline.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+First, it avoids costly manual feature engineering. Traditional static classifiers often require carefully chosen PE features, imported APIs, opcode statistics, entropy measures, or packer-specific heuristics. Image conversion bypasses much of that by letting the model learn directly from the binary&#x27;s spatial structure.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Second, image models are effective at recognizing repeated local motifs. Malware families frequently reuse builders, packers, configuration layouts, and stub structures. Those similarities induce recurring textures and block patterns that convolutional networks can exploit.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Third, this representation is architecture-agnostic at the feature-extraction stage. The model does not need a complete disassembler or dynamic execution environment. That makes it attractive as a fast pre-analysis layer in a larger malware processing pipeline.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The tradeoff is equally important: image rendering discards semantic structure. Control flow, API semantics, and runtime behavior are not modeled directly. As a result, this method is best understood as a &lt;b&gt;statistical family-attribution baseline&lt;&#x2F;b&gt;, not as comprehensive malware understanding.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Dataset Design and Experimental Setup&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The experiment uses the &lt;b&gt;Malimg&lt;&#x2F;b&gt; image dataset, where each folder corresponds to a malware family. The first pass over the dataset computes the family distribution, which is not a cosmetic step. Class imbalance directly affects what the classifier learns, especially in family-level attribution tasks where common families can dominate optimization.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The dataset is split into train and test partitions with an &lt;b&gt;80&#x2F;20&lt;&#x2F;b&gt; ratio, yielding &lt;b&gt;9,339&lt;&#x2F;b&gt; copied files in the derived dataset layout. Images are resized to &lt;code&gt;75 x 75&lt;&#x2F;code&gt;, converted to tensors, and normalized using ImageNet statistics. Training uses a shuffled data loader; test inference does not. These are standard design choices, but their implications matter:
+&lt;&#x2F;p&gt;
+&lt;ul&gt;
+  &lt;li&gt;Resizing enforces a fixed input geometry and reduces computational cost.&lt;&#x2F;li&gt;
+  &lt;li&gt;Normalization aligns the data distribution with the pretrained backbone.&lt;&#x2F;li&gt;
+  &lt;li&gt;The absence of augmentation means the experiment prioritizes interpretability over robustness.&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;
+That last point is worth emphasizing. No random crops, rotations, or perturbations are introduced. This keeps the reported score closer to the raw dataset distribution, but it also means the model is not explicitly trained to resist benign representation shifts or more adversarial changes such as repacking artifacts.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Architecture Choice&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The classifier uses a pretrained &lt;b&gt;ResNet50&lt;&#x2F;b&gt; backbone with its parameters frozen, while the final classification head is replaced by:
+&lt;&#x2F;p&gt;
+&lt;pre&gt;Linear(num_features, 1000)
+ReLU
+Linear(1000, n_classes)&lt;&#x2F;pre&gt;
+&lt;p&gt;
+This is a classic &lt;b&gt;transfer-learning&lt;&#x2F;b&gt; configuration. The rationale is straightforward. The available malware image corpus is not large enough to justify training a deep convolutional network from scratch. A pretrained ResNet already encodes rich detectors for edges, contours, local textures, and hierarchical spatial structure. Even though it was originally trained on natural images rather than malware, those low-level and mid-level filters can still provide useful inductive bias.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Freezing the backbone also lowers variance. Instead of letting optimization reshape millions of parameters on a relatively small dataset, the notebook trains only a lightweight task-specific head. That reduces compute cost and stabilizes convergence, which is appropriate for a baseline study.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The limitation is domain mismatch. ImageNet pretraining is useful because it teaches general visual abstractions, but malware images are not photographs. They encode byte adjacency rather than physical objects. The method works because texture-like regularities exist in binary layouts, not because malware images are naturally congruent with the original pretraining domain.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Optimization Strategy&lt;&#x2F;h2&gt;
+&lt;p&gt;
+Training uses &lt;code&gt;CrossEntropyLoss&lt;&#x2F;code&gt; with the &lt;code&gt;Adam&lt;&#x2F;code&gt; optimizer for &lt;b&gt;10 epochs&lt;&#x2F;b&gt;. Batch sizes are &lt;b&gt;512&lt;&#x2F;b&gt; for training and &lt;b&gt;1024&lt;&#x2F;b&gt; for testing. There is no learning-rate schedule, no early stopping, and no explicit regularization beyond the frozen backbone design.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+This makes the experiment intentionally modest. It is not an aggressively tuned benchmark; it is a reproducible baseline intended to show how far a standard transfer-learning recipe can go on malware imagery.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Findings&lt;&#x2F;h2&gt;
+&lt;p&gt;
+Training accuracy rises from &lt;b&gt;59.35%&lt;&#x2F;b&gt; in the first epoch to &lt;b&gt;96.68%&lt;&#x2F;b&gt; by epoch 10, while the held-out test accuracy reaches &lt;b&gt;89.04%&lt;&#x2F;b&gt;. The headline result is respectable, but the gap between training and test performance is the more informative signal.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+A roughly &lt;b&gt;7.6-point&lt;&#x2F;b&gt; gap suggests the classifier is fitting the training distribution more strongly than it generalizes to unseen samples. In malware datasets, that is not surprising. Family collections often contain repeated visual conventions induced by specific packers, builders, or artifact-generation pipelines. A convolutional model can exploit those cues effectively, but that does not guarantee it has learned durable family semantics.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+In other words, the reported accuracy likely reflects a mixture of genuine family discrimination and dataset-specific regularity capture. Both are useful in triage, but they should not be conflated.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Why This Baseline Still Matters&lt;&#x2F;h2&gt;
+&lt;p&gt;
+Despite its limitations, this architecture is valuable for three reasons.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+First, it is computationally cheap relative to richer static or dynamic pipelines. That makes it suitable for early-stage prioritization, where speed matters more than maximal interpretability.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Second, it is operationally composable. A malware lab can use this classifier as one signal among many, alongside hashes, strings, import graphs, sandbox observations, and YARA matches.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Third, the method provides a useful research baseline. If a more advanced static or multimodal model cannot outperform this transfer-learning setup, that says something important about the value of the added complexity.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Limitations&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The notebook reports only aggregate accuracy, which is not sufficient for a serious malware-family study. A per-family confusion matrix would be much more informative because operational value depends on which families get confused, not just how often errors occur overall.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The experiment also does not test robustness under packing variation, family drift, or cross-dataset transfer. Those are precisely the conditions under which a visually trained malware classifier is most likely to fail.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Finally, image-only modeling ignores behaviors that matter most in incident response: persistence logic, C2 semantics, credential access, process injection, and lateral movement mechanics. A family label can accelerate triage, but it cannot answer those questions on its own.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Conclusion&lt;&#x2F;h2&gt;
+&lt;p&gt;
+This experiment demonstrates that malware image classification remains a credible transfer-learning baseline for family attribution. ResNet50 is not chosen because it is fashionable; it is chosen because deep residual networks provide strong visual priors, and freezing the backbone gives a stable solution in the low-data regime. The resulting model is best viewed as a fast attribution layer in a broader malware-analysis stack, not as a substitute for behavioral or semantic analysis.
+&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>Network Anomaly Detection with Random Forests</title>
+        <published>2026-03-07T00:00:00+00:00</published>
+        <updated>2026-03-07T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            MALEK452
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/network-anomaly-detection/"/>
+        <id>https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/network-anomaly-detection/</id>
+        
+        <content type="html" xml:base="https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/network-anomaly-detection/">&lt;p&gt;&lt;i&gt;This post is based on my solution notebook for the Hack The Box AI Red Teamer path module on applying AI in infosec. The notebook itself is compact; the discussion below reframes it as a methodological study of attack categorization in tabular network data.&lt;&#x2F;i&gt;&lt;&#x2F;p&gt;
+&lt;div class=&quot;buttons centered&quot;&gt;
+  &lt;a href=&quot;&#x2F;notebooks&#x2F;htb-ai-red-teamer&#x2F;network.ipynb&quot; download&gt;Download notebook&lt;&#x2F;a&gt;
+&lt;&#x2F;div&gt;
+&lt;h2&gt;Problem Setting&lt;&#x2F;h2&gt;
+&lt;p&gt;
+Network intrusion detection can be framed at multiple levels of granularity. The simplest formulation is binary: normal versus malicious. That framing is operationally useful for alerting, but it is incomplete for response. A volumetric denial-of-service event, a reconnaissance scan, a privilege-escalation attempt, and an unauthorized access pattern impose different investigative and containment priorities.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The notebook therefore adopts a &lt;b&gt;multi-class&lt;&#x2F;b&gt; formulation. Instead of predicting individual NSL-KDD attack names directly, it groups them into broader response-oriented categories:
+&lt;&#x2F;p&gt;
+&lt;ul&gt;
+  &lt;li&gt;&lt;b&gt;Normal&lt;&#x2F;b&gt;&lt;&#x2F;li&gt;
+  &lt;li&gt;&lt;b&gt;DoS&lt;&#x2F;b&gt;&lt;&#x2F;li&gt;
+  &lt;li&gt;&lt;b&gt;Probe&lt;&#x2F;b&gt;&lt;&#x2F;li&gt;
+  &lt;li&gt;&lt;b&gt;Privilege&lt;&#x2F;b&gt;&lt;&#x2F;li&gt;
+  &lt;li&gt;&lt;b&gt;Access&lt;&#x2F;b&gt;&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;
+This design is sensible. It reduces label fragmentation while preserving distinctions that matter to defenders. In research terms, it is a compromise between coarse anomaly detection and fine-grained attack taxonomy.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Why a Tabular Model?&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The NSL-KDD dataset is fundamentally a structured-feature dataset. Each record already contains engineered attributes such as byte counts, error rates, host-level statistics, and service-level frequencies. Under those conditions, tree-based ensemble methods are often a stronger baseline than deep models because the representation work has already been done.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+That is why the notebook uses a &lt;b&gt;RandomForestClassifier&lt;&#x2F;b&gt;. Random forests are particularly well suited to this setting for four reasons:
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+They naturally handle nonlinear interactions without requiring feature scaling. They are robust to mixed feature distributions. They perform well when informative thresholds exist in the data. And they provide strong baseline accuracy on structured intrusion-detection corpora with limited hyperparameter tuning.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+This is an example of choosing a model that matches the data modality rather than defaulting to neural architectures for their own sake.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Feature Representation&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The dataset contains &lt;b&gt;148,517&lt;&#x2F;b&gt; rows. Categorical fields are partially encoded using one-hot vectors for &lt;code&gt;protocol_type&lt;&#x2F;code&gt; and &lt;code&gt;service&lt;&#x2F;code&gt;, then joined with &lt;b&gt;34&lt;&#x2F;b&gt; numeric traffic features. These numeric variables capture flow size, login behavior, fragment anomalies, connection density, and host&#x2F;service error rates.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The choice of features reflects a classic IDS assumption: malicious traffic differs from benign traffic not only by payload content but also by its statistical footprint. Repeated failed connections, abnormal byte asymmetry, unexpected service concentration, or unusually high host error rates can all function as predictive signals.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+There is also an instructive omission. The notebook does not encode the &lt;code&gt;flag&lt;&#x2F;code&gt; feature, even though it exists in the dataset and often carries meaningful connection-state information. The fact that the model still performs well suggests the remaining feature set is highly informative, but it also means the experiment is best read as a strong baseline rather than a maximally engineered version of NSL-KDD.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Label Engineering&lt;&#x2F;h2&gt;
+&lt;p&gt;
+A major methodological step is the mapping from individual attacks to grouped attack families. This is not just cosmetic label cleanup. It imposes a defender-oriented inductive structure on the dataset.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+For example, grouping &lt;code&gt;nmap&lt;&#x2F;code&gt;, &lt;code&gt;portsweep&lt;&#x2F;code&gt;, and &lt;code&gt;satan&lt;&#x2F;code&gt; into &lt;b&gt;Probe&lt;&#x2F;b&gt; reflects the fact that these behaviors are distinct at the tactical level but similar in terms of reconnaissance intent. Likewise, consolidating exploit-like behaviors into &lt;b&gt;Privilege&lt;&#x2F;b&gt; and credential or service abuse into &lt;b&gt;Access&lt;&#x2F;b&gt; makes the output more interpretable from a triage perspective.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+This kind of label engineering often matters as much as model selection because it determines what the model is actually being asked to learn.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Experimental Design&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The data is split into train and test partitions with &lt;b&gt;80&#x2F;20&lt;&#x2F;b&gt; separation, followed by an additional validation split carved from the training set. The model uses &lt;code&gt;class_weight=&quot;balanced&quot;&lt;&#x2F;code&gt;, which is important because attack categories are unevenly represented.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+That weighting is not sufficient to eliminate imbalance effects, but it is a reasonable first response. It tells the forest not to optimize purely for the dominant classes, which in this dataset would otherwise lead to inflated global accuracy and weak minority-class recall.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Why the Results Look Better Than They Are&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The validation metrics are extremely high:
+&lt;&#x2F;p&gt;
+&lt;pre&gt;Accuracy:  0.9947
+Precision: 0.9946
+Recall:    0.9947
+F1-score:  0.9945&lt;&#x2F;pre&gt;
+&lt;p&gt;
+The test metrics remain similarly strong:
+&lt;&#x2F;p&gt;
+&lt;pre&gt;Accuracy:  0.9950
+Precision: 0.9949
+Recall:    0.9950
+F1-score:  0.9949&lt;&#x2F;pre&gt;
+&lt;p&gt;
+A superficial reading would conclude that the detection problem is essentially solved. That conclusion would be incorrect.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The detailed class report reveals the real story. &lt;b&gt;Normal&lt;&#x2F;b&gt;, &lt;b&gt;DoS&lt;&#x2F;b&gt;, and &lt;b&gt;Probe&lt;&#x2F;b&gt; are classified almost perfectly. But the &lt;b&gt;Privilege&lt;&#x2F;b&gt; class performs far worse, with recall of &lt;b&gt;0.33&lt;&#x2F;b&gt; on validation and &lt;b&gt;0.52&lt;&#x2F;b&gt; on test. The problem is not the random forest itself; the problem is the combination of low support and difficult minority-class structure.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+This is a recurring pattern in security machine learning. The classes that dominate the weighted averages are often not the classes that matter most in practice. Missing a rare privilege-escalation event is usually more consequential than slightly over-alerting on common reconnaissance.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Interpretation&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The strong performance on DoS and Probe is intuitive. These classes are well represented and tend to have consistent statistical signatures. Flooding, scan behavior, and service enumeration often leave highly separable traces in engineered connection features.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Privilege and Access events are harder. They may be sparse, heterogeneous, and closer to normal application behavior in feature space. They are also the classes where semantic context would help most, but the model sees only precomputed network statistics.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+This distinction matters because it tells us what the model is actually good at: &lt;b&gt;macro-pattern intrusion triage&lt;&#x2F;b&gt;, not reliable detection of subtle high-value compromise behaviors.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Why Random Forest Is Still a Good Choice&lt;&#x2F;h2&gt;
+&lt;p&gt;
+Even with these limitations, the model choice remains defensible. A random forest gives excellent baseline performance with little tuning, trains quickly, and provides a robust reference point for future improvements. In research workflow terms, it is the right baseline to beat before moving to more complex methods such as gradient boosting, cost-sensitive ensembles, or neural tabular architectures.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Importantly, the notebook saves the trained model to &lt;code&gt;network_anomaly_detection_model.joblib&lt;&#x2F;code&gt;, which makes the exercise more than purely academic. The output is deployable as a scoring component, provided its limitations are respected.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Limitations&lt;&#x2F;h2&gt;
+&lt;p&gt;
+NSL-KDD is an educational dataset, not a faithful representation of modern enterprise traffic. That matters because a model can perform extremely well on this benchmark while generalizing poorly to contemporary encrypted, cloud-mediated, or heavily multiplexed environments.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The evaluation also remains feature-centric. There is no adversarial robustness analysis, no concept-drift study, and no calibration assessment. A detector that is accurate but poorly calibrated can still create operational problems if its confidence scores are used for automation.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Finally, the minority-class issue should be treated as central, not peripheral. For real deployment, I would prioritize class-specific recall improvements over pushing the already excellent global accuracy a few decimal points higher.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Conclusion&lt;&#x2F;h2&gt;
+&lt;p&gt;
+This experiment shows why structured-feature intrusion detection remains a strong domain for classical ensemble learning. The choice of a random forest is justified by the nature of the data, the grouped label design is justified by operational response logic, and the results are strong enough to establish a serious baseline. The important lesson, however, is not that the model achieves 99.5% accuracy. It is that high aggregate metrics can conceal the exact failure modes defenders care about most.
+&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>Sentiment Analysis with an LSTM Pipeline</title>
+        <published>2026-03-07T00:00:00+00:00</published>
+        <updated>2026-03-07T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            MALEK452
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/sentiment-analysis-lstm/"/>
+        <id>https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/sentiment-analysis-lstm/</id>
+        
+        <content type="html" xml:base="https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/sentiment-analysis-lstm/">&lt;p&gt;&lt;i&gt;This post is based on my solution notebook for the Hack The Box AI Red Teamer path module on applying AI in infosec. The underlying dataset is not security-specific, but the pipeline is relevant because it demonstrates a principled sequence-modeling workflow that can be transferred to security text tasks.&lt;&#x2F;i&gt;&lt;&#x2F;p&gt;
+&lt;div class=&quot;buttons centered&quot;&gt;
+  &lt;a href=&quot;&#x2F;notebooks&#x2F;htb-ai-red-teamer&#x2F;sentiment.ipynb&quot; download&gt;Download notebook&lt;&#x2F;a&gt;
+&lt;&#x2F;div&gt;
+&lt;h2&gt;Why This Task Still Matters in an Infosec Context&lt;&#x2F;h2&gt;
+&lt;p&gt;
+At first glance, sentiment classification on movie reviews appears orthogonal to security. It is not. What matters here is not the target label but the &lt;b&gt;NLP design pattern&lt;&#x2F;b&gt;: raw-text normalization, vocabulary management, sequence construction, recurrent modeling, and held-out evaluation. These are the same building blocks one would use for phishing-lure classification, ticket triage, analyst note tagging, or threat-intelligence text processing.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The notebook is therefore best interpreted as a &lt;b&gt;transferable methodological template&lt;&#x2F;b&gt; rather than as a domain-specific security detector.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Representation Choice&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The first important decision is to treat text as an ordered sequence rather than a bag of independent terms. That is why the notebook uses an &lt;b&gt;LSTM&lt;&#x2F;b&gt; instead of a purely count-based classifier.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+This choice has a defensible motivation. Sentiment often depends on compositional structure, negation, and local temporal dependency. The phrase &quot;not good&quot; should not be interpreted the same way as &quot;good&quot;, and simple lexical frequency models can struggle with that distinction. More broadly, many security-adjacent text problems also contain order-dependent meaning, especially in user reports, lure language, and free-form narratives.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+An LSTM is therefore a reasonable baseline whenever the goal is to capture short- and medium-range contextual dependencies without jumping immediately to transformer architectures.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Preprocessing Philosophy&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The notebook cleans the corpus by stripping HTML, lowercasing, collapsing whitespace, removing most non-alphanumeric symbols, tokenizing with NLTK, and removing English stop words. Importantly, it preserves a small set of punctuation symbols such as &lt;code&gt;!&lt;&#x2F;code&gt;, &lt;code&gt;$&lt;&#x2F;code&gt;, and &lt;code&gt;?&lt;&#x2F;code&gt;.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+That is a subtle but meaningful design choice. In informal online text, punctuation often carries emotional or persuasive force. In security-related corpora, those same symbols can correlate with urgency, coercion, or fraud. A preprocessing pipeline that deletes all such markers may inadvertently remove useful discriminative signal.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The tradeoff is that stop-word removal can weaken sequence semantics in some contexts. For bag-of-words models it is common and often beneficial. For sequence models, the case is less obvious because function words sometimes help preserve relational meaning. This notebook keeps the pipeline simple, but that choice would deserve ablation testing in a more formal study.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Sequence Construction&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The text is tokenized with a Keras tokenizer capped at a vocabulary of &lt;b&gt;20,000&lt;&#x2F;b&gt; words and an explicit &lt;code&gt;&amp;lt;OOV&amp;gt;&lt;&#x2F;code&gt; token. Sequences are padded to a fixed length of &lt;b&gt;200&lt;&#x2F;b&gt;.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Both decisions are sensible compromises. Vocabulary truncation prevents the model from overfitting to extremely rare terms and keeps the embedding layer tractable. Fixed-length padding provides computational regularity and allows batching, while the out-of-vocabulary token gives the model a principled fallback for unseen text at inference time.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+In research terms, this is a controlled capacity-management strategy: bound the lexical space, bound the sequence length, and let the model learn under those constraints.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Architecture Choice&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The model architecture is:
+&lt;&#x2F;p&gt;
+&lt;pre&gt;Embedding(20000, 128)
+LSTM(64)
+Dropout(0.5)
+Dense(1, activation=&quot;sigmoid&quot;)&lt;&#x2F;pre&gt;
+&lt;p&gt;
+Each layer has a clear role. The embedding layer converts sparse token identities into dense vector representations. The LSTM models sequential dependency. The dropout layer regularizes the representation before classification. The sigmoid output is appropriate for binary prediction.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+This is not a state-of-the-art architecture, and that is precisely why it is useful. It is compact enough that the modeling assumptions remain legible. If a much more complex system is later introduced, this baseline provides a clean reference point for judging whether the added complexity is actually buying meaningful performance.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Optimization and Learning Dynamics&lt;&#x2F;h2&gt;
+&lt;p&gt;
+Training uses the Adam optimizer, binary cross-entropy loss, a batch size of &lt;b&gt;32&lt;&#x2F;b&gt;, and &lt;b&gt;5 epochs&lt;&#x2F;b&gt;. The model is evaluated on a validation set split from the original training data and then on a separate test set.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The learning curve is instructive. The first three epochs remain weak, then performance improves sharply:
+&lt;&#x2F;p&gt;
+&lt;pre&gt;Epoch 1: accuracy 0.5122, val_accuracy 0.5320
+Epoch 2: accuracy 0.5476, val_accuracy 0.5278
+Epoch 3: accuracy 0.5653, val_accuracy 0.5408
+Epoch 4: accuracy 0.8023, val_accuracy 0.8542
+Epoch 5: accuracy 0.9196, val_accuracy 0.8750&lt;&#x2F;pre&gt;
+&lt;p&gt;
+This pattern is consistent with sequence models that need several epochs before the embedding space and recurrent state dynamics begin to align with the task signal. The later jump suggests the network eventually learns more meaningful token interactions rather than merely surface-level frequency patterns.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Evaluation&lt;&#x2F;h2&gt;
+&lt;p&gt;
+On the held-out test set, the model reports:
+&lt;&#x2F;p&gt;
+&lt;pre&gt;Loss:     0.3676
+Accuracy: 0.8603&lt;&#x2F;pre&gt;
+&lt;p&gt;
+An &lt;b&gt;86.03%&lt;&#x2F;b&gt; test accuracy is respectable for a compact baseline, but the more important conclusion is interpretive rather than numerical. The architecture is strong enough to capture sequential text structure, yet still simple enough that there is substantial room for improvement through better preprocessing decisions, pretrained embeddings, bidirectional recurrence, or modern transformer baselines.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;What This Teaches for Security NLP&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The real value of this exercise lies in its transferability. Security text is often noisy, inconsistent, and partially structured. Whether the task is classifying phishing emails, labeling incident tickets, detecting coercive language in social engineering, or filtering open-source chatter, the same questions recur:
+&lt;&#x2F;p&gt;
+&lt;ul&gt;
+  &lt;li&gt;What information should preprocessing preserve?&lt;&#x2F;li&gt;
+  &lt;li&gt;How large should the vocabulary be?&lt;&#x2F;li&gt;
+  &lt;li&gt;How much sequence context is enough?&lt;&#x2F;li&gt;
+  &lt;li&gt;Is order-dependent modeling worth the complexity over lexical baselines?&lt;&#x2F;li&gt;
+&lt;&#x2F;ul&gt;
+&lt;p&gt;
+This notebook provides a reasonable answer set for a baseline sequence model.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Limitations&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The dataset is not security-native, so task transfer is conceptual rather than empirical. Any serious security application would require domain data, label design aligned with analyst workflows, and evaluation on realistic class distributions.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+There is also an artifact-management caveat. The notebook saves both a Keras model file and a &lt;code&gt;joblib&lt;&#x2F;code&gt; dump. In practice, the native Keras serialization path is the more appropriate long-term artifact, and the tokenizer should be versioned alongside the model.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Finally, by 2026, transformer models are the default comparison point for many text tasks. That does not invalidate the LSTM baseline, but it does mean the architecture should be understood as a deliberate simplicity choice rather than a modern upper bound.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Conclusion&lt;&#x2F;h2&gt;
+&lt;p&gt;
+This experiment is valuable because it makes its assumptions visible. The LSTM is chosen to model sequence dependence, the vocabulary cap is chosen to control capacity, padding is chosen to stabilize batching, and the final accuracy shows that a compact recurrent model can still learn meaningful textual structure. As a research-style baseline for security-adjacent NLP, that is exactly the kind of result worth documenting.
+&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+    <entry xml:lang="en">
+        <title>SMS Spam Detection with Naive Bayes</title>
+        <published>2026-03-07T00:00:00+00:00</published>
+        <updated>2026-03-07T00:00:00+00:00</updated>
+        
+        <author>
+          <name>
+            MALEK452
+          </name>
+        </author>
+        
+        <link rel="alternate" type="text/html" href="https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/sms-spam-detection/"/>
+        <id>https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/sms-spam-detection/</id>
+        
+        <content type="html" xml:base="https://malek4522.github.io/MalekZone/blog/htb-ai-infosec-series/sms-spam-detection/">&lt;p&gt;&lt;i&gt;This post is based on my solution notebook for the Hack The Box AI Red Teamer path module on applying AI in infosec. I rewrote the accompanying article to focus on the methodological logic of spam detection rather than on the mechanics of the notebook itself.&lt;&#x2F;i&gt;&lt;&#x2F;p&gt;
+&lt;div class=&quot;buttons centered&quot;&gt;
+  &lt;a href=&quot;&#x2F;notebooks&#x2F;htb-ai-red-teamer&#x2F;sms.ipynb&quot; download&gt;Download notebook&lt;&#x2F;a&gt;
+&lt;&#x2F;div&gt;
+&lt;h2&gt;Problem Setting&lt;&#x2F;h2&gt;
+&lt;p&gt;
+SMS spam detection is a compact but useful proxy for &lt;b&gt;smishing defense&lt;&#x2F;b&gt;. Unlike long-form email, SMS content is short, sparse, urgency-heavy, and lexically repetitive. Attackers rely on constrained text budgets, which often makes their language statistically easier to model than more elaborate phishing campaigns.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+That characteristic makes SMS an excellent setting for classical text classification. If a method cannot perform well on short, high-signal lure text, it is unlikely to hold up in more complex messaging environments.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Why a Classical Model Is Appropriate Here&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The notebook uses &lt;b&gt;Multinomial Naive Bayes&lt;&#x2F;b&gt; with unigram and bigram features. This is not a compromise born of simplicity alone; it is also a methodologically sensible decision.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Naive Bayes performs well when predictive signal is concentrated in sparse lexical cues. Spam and smishing messages often exhibit exactly that structure: &quot;free&quot;, &quot;win&quot;, &quot;urgent&quot;, &quot;claim&quot;, &quot;verify&quot;, monetary references, and reward-oriented phrasing. Because many of these indicators are explicit rather than deeply contextual, a lightweight probabilistic model can remain highly competitive as a baseline.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+In other words, the model is chosen because the statistical structure of the problem justifies it, not merely because it is easy to implement.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Dataset and Data Quality&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The experiment uses the &lt;b&gt;UCI SMS Spam Collection&lt;&#x2F;b&gt;. The raw dataset contains &lt;b&gt;5,572&lt;&#x2F;b&gt; messages, no missing values, and &lt;b&gt;403&lt;&#x2F;b&gt; duplicate entries, which are removed before modeling. That leaves an effective working corpus of &lt;b&gt;5,169&lt;&#x2F;b&gt; rows.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+Deduplication matters more than it might seem. In spam datasets, repeated templates can artificially inflate model confidence and make evaluation look stronger than it really is. Removing duplicates therefore improves the integrity of the experiment by reducing the chance that a classifier simply memorizes recurring lure variants.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The label distribution is also imbalanced toward benign &lt;code&gt;ham&lt;&#x2F;code&gt; messages, which mirrors real-world defensive settings. A good spam detector should therefore be judged on class-sensitive metrics rather than raw accuracy alone.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Preprocessing Strategy&lt;&#x2F;h2&gt;
+&lt;p&gt;
+Messages are lowercased, stripped of most punctuation and digits, tokenized, filtered for English stop words, stemmed with Porter stemming, and then rejoined into normalized strings.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+This preprocessing pipeline reflects a clear modeling philosophy: reduce superficial lexical variation so that semantically similar lure phrases collapse toward the same feature representation. For example, stemming helps normalize families of words that differ morphologically but carry similar spam intent.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The notebook preserves &lt;code&gt;$&lt;&#x2F;code&gt; and &lt;code&gt;!&lt;&#x2F;code&gt;, which is a good choice for a spam problem. Financial cues and emphatic punctuation are not noise here; they are part of the signal.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+There is, however, a tradeoff. Removing numbers may weaken sensitivity to phone numbers, short codes, or numeric prize language. For a stricter smishing study, I would test whether number-preserving normalization improves performance on lure-heavy messages containing transaction amounts, OTP prompts, or callback instructions.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Feature Design&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The vectorizer uses:
+&lt;&#x2F;p&gt;
+&lt;pre&gt;ngram_range = (1, 2)
+min_df = 1
+max_df = 0.9&lt;&#x2F;pre&gt;
+&lt;p&gt;
+This configuration is well chosen for short text. Unigrams capture the dominant lexical cues, while bigrams recover short phrase structure such as &quot;claim now&quot;, &quot;free entry&quot;, or &quot;call later&quot;. The &lt;code&gt;max_df&lt;&#x2F;code&gt; threshold suppresses extremely common terms that are unlikely to be discriminative across classes.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+For this problem, bag-of-words features are not a weakness; they are aligned with the threat model. Smishing campaigns frequently optimize for direct lexical pressure rather than subtle semantics.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Model Selection&lt;&#x2F;h2&gt;
+&lt;p&gt;
+Rather than fixing the Naive Bayes smoothing term by intuition, the notebook performs a grid search over:
+&lt;&#x2F;p&gt;
+&lt;pre&gt;alpha = [0.01, 0.1, 0.15, 0.2, 0.25, 0.5, 0.75, 1.0]&lt;&#x2F;pre&gt;
+&lt;p&gt;
+with &lt;b&gt;5-fold cross-validation&lt;&#x2F;b&gt; and &lt;b&gt;F1-score&lt;&#x2F;b&gt; as the optimization metric. The best parameter is:
+&lt;&#x2F;p&gt;
+&lt;pre&gt;{&#x27;classifier__alpha&#x27;: 0.25}&lt;&#x2F;pre&gt;
+&lt;p&gt;
+This is a sound choice. F1-score is more appropriate than plain accuracy in imbalanced security classification because it captures the tension between missing malicious messages and over-flagging benign ones. Selecting hyperparameters by F1 therefore better reflects operational cost than maximizing raw correctness.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Inference Behavior&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The notebook evaluates several synthetic example messages, including reward lures, account-compromise bait, and benign social coordination text. The predictions are directionally correct: promotional prize messages and urgent verification prompts score as spam, while everyday reminders and lunch coordination messages score as non-spam.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+That is exactly what a well-behaved lexical baseline should do. It responds strongly to high-signal lure language without needing deep contextual reasoning.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Why This Baseline Is Useful&lt;&#x2F;h2&gt;
+&lt;p&gt;
+Classical text models remain operationally attractive for anti-phishing pipelines because they are fast, interpretable, and cheap to deploy. A Naive Bayes model with transparent vocabulary features can be inspected by defenders, retrained quickly, and integrated as one signal among others such as sender reputation, URL features, device telemetry, or mobile-app context.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+For many real systems, that is exactly the right role: not a universal phishing oracle, but a &lt;b&gt;high-speed lexical filter&lt;&#x2F;b&gt; that feeds a larger decision pipeline.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Limitations&lt;&#x2F;h2&gt;
+&lt;p&gt;
+The notebook does not present a formal held-out test-set evaluation after model selection; it relies on cross-validation and example inference. That is acceptable for an educational baseline but not sufficient for a paper-style performance claim. A stronger study would include a strict train-test split, confusion matrix analysis, class-wise precision and recall, calibration behavior, and robustness against deliberate obfuscation.
+&lt;&#x2F;p&gt;
+&lt;p&gt;
+The model is also vulnerable to adversarial wording changes. Character substitutions, multilingual bait, URL obfuscation, benign-text padding, and stylistic drift can all reduce the effectiveness of simple lexical features. Those are not reasons to reject the method; they are reasons to place it appropriately in a layered defense.
+&lt;&#x2F;p&gt;
+&lt;h2&gt;Conclusion&lt;&#x2F;h2&gt;
+&lt;p&gt;
+This experiment is a strong example of methodological fit. Naive Bayes is chosen because SMS spam is sparse and lexically explicit. Bigrams are included because short phrase structure matters. F1-based model selection is used because class-sensitive error matters more than raw accuracy. As a result, the notebook produces a credible smishing-oriented baseline that is lightweight, explainable, and operationally realistic as an early filtering component.
+&lt;&#x2F;p&gt;
+</content>
+        
+    </entry>
+</feed>

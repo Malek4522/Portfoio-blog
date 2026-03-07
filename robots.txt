@@ -1,0 +1,4 @@
+User-agent: *
+Disallow:
+Allow: /
+Sitemap: https://malek4522.github.io/MalekZone/sitemap.xml
